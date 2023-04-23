@@ -87,12 +87,17 @@ def generate_launch_description():
 
     declare_use_sim_time_cmd = DeclareLaunchArgument(
         'use_sim_time',
-        default_value='false',
+        default_value='True',
         description='Use simulation (Gazebo) clock if true')
 
+    # declare_params_file_cmd = DeclareLaunchArgument(
+    #     'params_file',
+    #     default_value=os.path.join(bringup_dir, 'params', 'nav2_params_tiago.yaml'),
+    #     description='Full path to the ROS2 parameters file to use for all launched nodes')
+    cv_dir = get_package_share_directory('computer_vision')
     declare_params_file_cmd = DeclareLaunchArgument(
         'params_file',
-        default_value=os.path.join(bringup_dir, 'params', 'nav2_params_tiago.yaml'),
+        default_value=os.path.join(cv_dir, 'params', 'tiago_nav_params.yaml'),
         description='Full path to the ROS2 parameters file to use for all launched nodes')
 
     declare_autostart_cmd = DeclareLaunchArgument(

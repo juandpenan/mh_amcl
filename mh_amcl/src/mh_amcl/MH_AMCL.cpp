@@ -55,7 +55,7 @@ MH_AMCL_Node::MH_AMCL_Node(const rclcpp::NodeOptions & options)
   tf_listener_(tf_buffer_)
 {
   sub_laser_ = create_subscription<sensor_msgs::msg::LaserScan>(
-    "scan", rclcpp::QoS(100).best_effort(), std::bind(&MH_AMCL_Node::laser_callback, this, _1));
+    "scan_raw", rclcpp::QoS(100).best_effort(), std::bind(&MH_AMCL_Node::laser_callback, this, _1));
   sub_map_ = create_subscription<nav_msgs::msg::OccupancyGrid>(
     "map", rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable(),
     std::bind(&MH_AMCL_Node::map_callback, this, _1));

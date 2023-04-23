@@ -15,7 +15,7 @@
 """This is all-in-one launch script intended for use by nav2 developers."""
 
 import os
-
+import yaml
 from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
@@ -65,20 +65,29 @@ def generate_launch_description():
         default_value='False',
         description='Whether run a SLAM')
 
+    cv_dir = get_package_share_directory('computer_vision')
+    config = os.path.join(cv_dir, 'config', 'params.yaml')
+
+    with open(config, "r") as stream:
+        try:
+            conf = (yaml.safe_load(stream))
+
+        except yaml.YAMLError as exc:
+            print(exc)
+
     declare_map_yaml_cmd = DeclareLaunchArgument(
         'map',
-        default_value=os.path.join(
-            bringup_dir_mh, 'maps', 'lab.yaml'),
+        default_value=os.path.join(cv_dir, 'maps', conf['computer_vision']['world']+'.yaml'),
         description='Full path to map file to load')
 
     declare_use_sim_time_cmd = DeclareLaunchArgument(
         'use_sim_time',
-        default_value='false',
+        default_value='True',
         description='Use simulation (Gazebo) clock if true')
 
     declare_params_file_cmd = DeclareLaunchArgument(
         'params_file',
-        default_value=os.path.join(bringup_dir_mh, 'params', 'nav2_params_tiago.yaml'),
+        default_value=os.path.join(cv_dir, 'params', 'tiago_nav_params.yaml'),
         description='Full path to the ROS2 parameters file to use for all launched nodes')
 
     declare_autostart_cmd = DeclareLaunchArgument(
