@@ -22,6 +22,7 @@
 
 #include <vector>
 #include <random>
+#include "MapMatcher.hpp"
 
 #include "sensor_msgs/msg/laser_scan.hpp"
 
@@ -64,6 +65,7 @@ public:
     rclcpp_lifecycle::LifecycleNode::SharedPtr parent_node, int id);
 
   void init(const tf2::Transform & pose_init);
+  void init(const  std::list<TransformWeighted> & multiple_poses);
   void predict(const tf2::Transform & movement);
   void correct_once(
     const sensor_msgs::msg::LaserScan & scan, const nav2_costmap_2d::Costmap2D & costmap);
