@@ -120,7 +120,8 @@ private:
   std::shared_ptr<nav2_costmap_2d::Costmap2D> costmap_;
   sensor_msgs::msg::LaserScan::UniquePtr last_laser_;
   std::shared_ptr<mh_amcl::MapMatcher> matcher_;
-
+  std::list<TransformWeighted> hypos_;
+  
   void map_callback(const nav_msgs::msg::OccupancyGrid::ConstSharedPtr & msg);
   void laser_callback(sensor_msgs::msg::LaserScan::UniquePtr lsr_msg);
   void initpose_callback(
