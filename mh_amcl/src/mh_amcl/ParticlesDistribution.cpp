@@ -345,11 +345,67 @@ ParticlesDistribution::on_cleanup(const rclcpp_lifecycle::State & state)
 }
 
 void
+ParticlesDistribution::init(const  std::list<TransformWeighted> & multiple_poses)
+{
+
+    // more particles if it is more probable and less particles if is less probbable
+    // this is (mean and standard deviation)
+
+    std::normal_distribution<double> noise_x(0, 1.0);
+    std::normal_distribution<double> noise_y(0, 1.0);
+    std::normal_distribution<double> noise_t(0, 2.0 * M_PI);
+
+    // we do a rest between the points 
+
+    // more particles if is more probbable and less if the weight is less 
+    particles_.clear();
+    particles_.resize((max_particles_ + min_particles_) / 2);
+
+
+    // here we have all the same
+    for (auto & particle : particles_) {
+      for (auto & transform : multiple_poses) {
+      
+        particle.prob = 1.0 / static_cast<double>(particles_.size());
+        particle.pose = transform.transform;
+
+        tf2::Vector3 pose = particle.pose.getOrigin();
+        pose.setX(pose.getX() + noise_x(generator_));
+        pose.setY(pose.getY() + noise_y(generator_));
+        pose.setZ(0.0);
+
+        particle.pose.setOrigin(pose);
+
+        double roll, pitch, yaw;
+        tf2::Matrix3x3(particle.pose.getRotation()).getRPY(roll, pitch, yaw);
+
+        double newyaw = yaw + noise_t(generator_);
+
+        tf2::Quaternion q;
+        q.setRPY(roll, pitch, newyaw);
+
+        particle.pose.setRotation(q);
+      }
+    }
+
+    normalize();
+    update_covariance(pose_);
+    update_pose(pose_);
+
+  
+
+}
+
+void
 ParticlesDistribution::init(const tf2::Transform & pose_init)
 {
-  std::normal_distribution<double> noise_x(0, init_error_x_);
-  std::normal_distribution<double> noise_y(0, init_error_y_);
-  std::normal_distribution<double> noise_t(0, init_error_yaw_);
+  // std::normal_distribution<double> noise_x(0, init_error_x_);
+  // std::normal_distribution<double> noise_y(0, init_error_y_);
+  // std::normal_distribution<double> noise_t(0, init_error_yaw_);
+
+  std::normal_distribution<double> noise_x(0, 0.5);
+  std::normal_distribution<double> noise_y(0, 0.5);
+  std::normal_distribution<double> noise_t(0, 2 * M_PI);
 
   particles_.clear();
   particles_.resize((max_particles_ + min_particles_) / 2);

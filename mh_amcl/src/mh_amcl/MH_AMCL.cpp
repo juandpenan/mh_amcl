@@ -61,12 +61,17 @@ MH_AMCL_Node::MH_AMCL_Node(const rclcpp::NodeOptions & options)
     std::bind(&MH_AMCL_Node::map_callback, this, _1));
   sub_init_pose_ = create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
     "initialpose", 100, std::bind(&MH_AMCL_Node::initpose_callback, this, _1));
+  sub_monologue_hypos = create_subscription<vqa_msgs::msg::MonologueHypothesis>(
+    "markov_pose", 1, std::bind(&MH_AMCL_Node::monologue_hypos_callback, this, _1));
+  
   pose_pub_ = create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("amcl_pose", 1);
   particles_pub_ = create_publisher<nav2_msgs::msg::ParticleCloud>("particle_cloud", 1);
   info_pub_ = create_publisher<mh_amcl_msgs::msg::Info>("info", 1);
+  hypo_client_ = create_client<vqa_msgs::srv::Hypothesis>("get_hypothesis");
 
   declare_parameter<int>("max_hypotheses", 5);
   declare_parameter<bool>("multihypothesis", true);
+  declare_parameter<bool>("multihypothesis_dialogue", false);
   declare_parameter<float>("min_candidate_weight", 0.5f);
   declare_parameter<double>("min_candidate_distance", 0.5);
   declare_parameter<double>("min_candidate_angle", M_PI_2);
@@ -87,6 +92,7 @@ MH_AMCL_Node::on_configure(const rclcpp_lifecycle::State & state)
   RCLCPP_INFO(get_logger(), "Configuring...");
 
   get_parameter("multihypothesis", multihypothesis_);
+  get_parameter("multihypothesis_dialogue", multihypothesis_dialogue_);
   get_parameter("max_hypotheses", max_hypotheses_);
   get_parameter("min_candidate_weight", min_candidate_weight_);
   get_parameter("min_candidate_distance", min_candidate_distance_);
@@ -118,6 +124,16 @@ MH_AMCL_Node::on_configure(const rclcpp_lifecycle::State & state)
 
   RCLCPP_ERROR(get_logger(), "Error configuring");
   return CallbackReturnT::FAILURE;
+  
+  auto hypo_request_ = std::make_shared<vqa_msgs::srv::Hypothesis::Request>();
+
+  while (!hypo_client_->wait_for_service(1s)) {
+    if (!rclcpp::ok()) {
+      RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Interrupted while waiting for the service. Exiting.");
+      return CallbackReturnT::FAILURE;
+    }
+    RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "service not available, waiting again...");
+  }
 }
 
 CallbackReturnT
@@ -133,11 +149,16 @@ MH_AMCL_Node::on_activate(const rclcpp_lifecycle::State & state)
   } else {
     RCLCPP_INFO(get_logger(), "use_sim_time = false");
   }
+  if (multihypothesis_dialogue_) {
+    RCLCPP_INFO(get_logger(), "multihypothesis_dialogue = true");
+  } else {
+    RCLCPP_INFO(get_logger(), "multihypothesis_dialogue = false");
+  }
 
   predict_timer_ = create_wall_timer(10ms, std::bind(&MH_AMCL_Node::predict, this));
   correct_timer_ = create_wall_timer(100ms, std::bind(&MH_AMCL_Node::correct, this));
   reseed_timer_ = create_wall_timer(3s, std::bind(&MH_AMCL_Node::reseed, this));
-  hypotesys_timer_ = create_wall_timer(3s, std::bind(&MH_AMCL_Node::manage_hypotesis, this));
+  hypotesys_timer_ = create_wall_timer(4s, std::bind(&MH_AMCL_Node::manage_hypotesis, this));
 
   publish_particles_timer_ = create_wall_timer(
     100ms, std::bind(&MH_AMCL_Node::publish_particles, this));
@@ -340,6 +361,13 @@ MH_AMCL_Node::initpose_callback(
 }
 
 void
+MH_AMCL_Node::monologue_hypos_callback(vqa_msgs::msg::MonologueHypothesis::UniquePtr msg)
+{
+  RCLCPP_INFO(get_logger(), "Received monologue hypos");
+  hypos_ = fromMsg(*std::move(msg));
+}
+
+void
 MH_AMCL_Node::publish_position()
 {
   if (costmap_ == nullptr || last_laser_ == nullptr) {
@@ -427,6 +455,27 @@ MH_AMCL_Node::publish_position()
   }
 }
 
+std::list<TransformWeighted> MH_AMCL_Node::fromMsg(const vqa_msgs::msg::MonologueHypothesis & hyp)
+{
+  std::list<TransformWeighted> ret;
+  for (std::size_t i = 0; i < hyp.poses.size(); i++)
+  {
+    RCLCPP_INFO(get_logger(), "Received hyp %d", i);
+    tf2::Transform transform;
+    transform.setOrigin(
+      {hyp.poses[i].position.x,
+       hyp.poses[i].position.y,
+       hyp.poses[i].position.z
+        });
+    transform.setRotation(
+      {0.0, 0.0, 0.0, 1.0});
+
+    ret.push_back({0.51, transform});
+  }  
+  return ret;
+  
+}
+
 geometry_msgs::msg::Pose
 MH_AMCL_Node::toMsg(const tf2::Transform & tf)
 {
@@ -447,40 +496,170 @@ MH_AMCL_Node::manage_hypotesis()
 {
   if (last_laser_ == nullptr || costmap_ == nullptr || matcher_ == nullptr) {return;}
 
-  if (!multihypothesis_) {return;}
+  // if (!multihypothesis_) {return;}
 
+  if (hypos_.size() == 0) 
+    {
+      RCLCPP_WARN(get_logger(), "No hypotesis to manage");
+      return;
+    }
+  // CLIENT TRY :
+  // if (hypo_future_.valid())
+  // {
+  //    const std::future_status status = hypo_future_.wait_for(3s);;
+  //     if (status == std::future_status::ready)
+  //     {
+  //       // future already got a result, check it and report to user
+  //       const auto result = hypo_future_.get();
+  //       // reset the future
+  //       hypo_future_ = {};
+  //       if (result->success)
+  //         RCLCPP_INFO_STREAM(get_logger(), "[ServiceClientExample]: future finished, service call successful");
+  //       else
+  //         RCLCPP_INFO_STREAM(get_logger(), "returning ");
+  //         return;
+  //     }
+  //     else
+  //       // future isn't ready yet
+  //       RCLCPP_INFO(get_logger(), "service timed out");
+  // }
+
+  // else
+  // {
+  //     auto request = std::make_shared<vqa_msgs::srv::Hypothesis::Request>();
+  //     hypo_future_ = hypo_client_->async_send_request(request);
+  //     return;   
+  // }
+
+    
+  auto & tfs = hypos_;
   auto start = now();
+  
+  if (multihypothesis_)
+  {
+    // Multiple hypothesis not too big particles :
+    // ----------------------------------------------------
+    // Create new Hypothesis
+    for (const auto & transform : tfs) {
+      if (transform.weight > min_candidate_weight_) {
+        bool covered = false;
 
-  const auto & tfs = matcher_->get_matchs(*last_laser_);
+        for (const auto & distr : particles_population_) {
+          const auto & pose = distr->get_pose().pose.pose;
+          geometry_msgs::msg::Pose posetf = toMsg(transform.transform);
 
-  // Create new Hypothesis
-  for (const auto & transform : tfs) {
-    if (transform.weight > min_candidate_weight_) {
-      bool covered = false;
+          double dist, difft;
+          get_distances(pose, posetf, dist, difft);
 
-      for (const auto & distr : particles_population_) {
-        const auto & pose = distr->get_pose().pose.pose;
-        geometry_msgs::msg::Pose posetf = toMsg(transform.transform);
+          if (dist < min_candidate_distance_ && difft < min_candidate_angle_) {
+            covered = true;
+          }
+        }
 
-        double dist, difft;
-        get_distances(pose, posetf, dist, difft);
-
-        if (dist < min_candidate_distance_ && difft < min_candidate_angle_) {
-          covered = true;
+        if (!covered && particles_population_.size() < max_hypotheses_) {
+          auto aux_distr = std::make_shared<ParticlesDistribution>(shared_from_this(), counter_++);
+          aux_distr->on_configure(get_current_state());
+          aux_distr->init(transform.transform);
+          aux_distr->on_activate(get_current_state());
+          particles_population_.push_back(aux_distr);
         }
       }
 
-      if (!covered && particles_population_.size() < max_hypotheses_) {
-        auto aux_distr = std::make_shared<ParticlesDistribution>(shared_from_this(), counter_++);
-        aux_distr->on_configure(get_current_state());
-        aux_distr->init(transform.transform);
-        aux_distr->on_activate(get_current_state());
-        particles_population_.push_back(aux_distr);
-      }
+      if (particles_population_.size() == max_hypotheses_) {break;} 
     }
 
-    if (particles_population_.size() == max_hypotheses_) {break;}
   }
+  else
+  {
+    RCLCPP_INFO(get_logger(), "Executing single dialogue hypo...");
+    auto aux_distr = std::make_shared<ParticlesDistribution>(shared_from_this(), counter_++);
+    aux_distr->on_configure(get_current_state());
+    tfs.erase(++tfs.begin(), tfs.end());
+    aux_distr->init(tfs);
+    aux_distr->on_activate(get_current_state());
+    particles_population_.push_back(aux_distr);
+    
+  }
+  
+  // ORIGINAL : 
+  //-------------------------------------------------------
+  // const auto & tfs = matcher_->get_matchs(*last_laser_);  
+  // const tf2::Transform & tfs; 
+  // tfs.from
+  // Create new Hypothesis
+  // for (const auto & transform : tfs) {
+  //   if (transform.weight > min_candidate_weight_) {
+  //     bool covered = false;
+
+  //     for (const auto & distr : particles_population_) {
+  //       const auto & pose = distr->get_pose().pose.pose;
+  //       geometry_msgs::msg::Pose posetf = toMsg(transform.transform);
+
+  //       double dist, difft;
+  //       get_distances(pose, posetf, dist, difft);
+
+  //       if (dist < min_candidate_distance_ && difft < min_candidate_angle_) {
+  //         covered = true;
+  //       }
+  //     }
+
+  //     if (!covered && particles_population_.size() < max_hypotheses_) {
+  //       auto aux_distr = std::make_shared<ParticlesDistribution>(shared_from_this(), counter_++);
+  //       aux_distr->on_configure(get_current_state());
+  //       aux_distr->init(transform.transform);
+  //       aux_distr->on_activate(get_current_state());
+  //       particles_population_.push_back(aux_distr);
+  //     }
+  //   }
+
+  //   if (particles_population_.size() == max_hypotheses_) {break;}
+  // }
+  // here we could make a for loop to create new hypotheses
+  //---------------------------------------------------
+  
+
+  // One hypothesis one big bounding box
+  // ----------------------------------------------------------------
+  // auto aux_distr = std::make_shared<ParticlesDistribution>(shared_from_this(), counter_++);
+  // aux_distr->on_configure(get_current_state());
+  // aux_distr->init(tfs);
+  // aux_distr->on_activate(get_current_state());
+  // particles_population_.push_back(aux_distr);
+  // if (particles_population_.size() == max_hypotheses_) {break;}
+  //----------------------------------------------------------------
+
+  // Multiple hypothesis not too big particles :
+  // ----------------------------------------------------
+  // Create new Hypothesis
+  // for (const auto & transform : tfs) {
+  //   if (transform.weight > min_candidate_weight_) {
+  //     bool covered = false;
+
+  //     for (const auto & distr : particles_population_) {
+  //       const auto & pose = distr->get_pose().pose.pose;
+  //       geometry_msgs::msg::Pose posetf = toMsg(transform.transform);
+
+  //       double dist, difft;
+  //       get_distances(pose, posetf, dist, difft);
+
+  //       if (dist < min_candidate_distance_ && difft < min_candidate_angle_) {
+  //         covered = true;
+  //       }
+  //     }
+
+  //     if (!covered && particles_population_.size() < max_hypotheses_) {
+  //       auto aux_distr = std::make_shared<ParticlesDistribution>(shared_from_this(), counter_++);
+  //       aux_distr->on_configure(get_current_state());
+  //       aux_distr->init(transform.transform);
+  //       aux_distr->on_activate(get_current_state());
+  //       particles_population_.push_back(aux_distr);
+  //     }
+  //   }
+
+  //   if (particles_population_.size() == max_hypotheses_) {break;}
+  // }
+
+  // ----------------------------------------------------
 
   auto it = particles_population_.begin();
   while (it != particles_population_.end()) {

@@ -37,6 +37,7 @@ def generate_launch_description():
     use_composition = LaunchConfiguration('use_composition')
     container_name = LaunchConfiguration('container_name')
     use_respawn = LaunchConfiguration('use_respawn')
+    multi = LaunchConfiguration('multi')
 
     lifecycle_nodes = ['controller_server',
                        'smoother_server',
@@ -58,7 +59,8 @@ def generate_launch_description():
     # Create our own temporary YAML files that include substitutions
     param_substitutions = {
         'use_sim_time': use_sim_time,
-        'autostart': autostart}
+        'autostart': autostart
+        }
 
     configured_params = RewrittenYaml(
             source_file=params_file,

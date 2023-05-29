@@ -48,8 +48,10 @@ def generate_launch_description():
     # Launch configuration variables specific to simulation
     rviz_config_file = LaunchConfiguration('rviz_config_file')
     use_rviz = LaunchConfiguration('use_rviz')
+    
 
     # Declare the launch arguments
+    
     declare_namespace_cmd = DeclareLaunchArgument(
         'namespace',
         default_value='',
@@ -138,6 +140,7 @@ def generate_launch_description():
     ld = LaunchDescription()
 
     # Declare the launch options
+
     ld.add_action(declare_namespace_cmd)
     ld.add_action(declare_use_namespace_cmd)
     ld.add_action(declare_slam_cmd)

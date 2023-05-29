@@ -36,6 +36,8 @@
 #include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
 #include "nav2_msgs/msg/particle_cloud.hpp"
 #include "mh_amcl_msgs/msg/info.hpp"
+#include "vqa_msgs/msg/monologue_hypothesis.hpp"
+#include "vqa_msgs/srv/hypothesis.hpp"
 
 #include "nav2_costmap_2d/costmap_2d.hpp"
 #include "mh_amcl/ParticlesDistribution.hpp"
@@ -75,14 +77,19 @@ protected:
     double & dist_xy, double & dist_theta);
   unsigned char get_cost(const geometry_msgs::msg::Pose & pose);
   geometry_msgs::msg::Pose toMsg(const tf2::Transform & tf);
+  std::list<TransformWeighted> fromMsg(const vqa_msgs::msg::MonologueHypothesis & hypo);
 
 private:
   rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr sub_map_;
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr sub_laser_;
   rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr sub_init_pose_;
+  rclcpp::Subscription<vqa_msgs::msg::MonologueHypothesis>::SharedPtr sub_monologue_hypos;
+
   rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr pose_pub_;
   rclcpp::Publisher<nav2_msgs::msg::ParticleCloud>::SharedPtr particles_pub_;
   rclcpp::Publisher<mh_amcl_msgs::msg::Info>::SharedPtr info_pub_;
+
+  rclcpp::Client<vqa_msgs::srv::Hypothesis>::SharedPtr hypo_client_;
 
   rclcpp::TimerBase::SharedPtr predict_timer_;
   rclcpp::TimerBase::SharedPtr correct_timer_;
@@ -93,6 +100,7 @@ private:
 
   int max_hypotheses_;
   bool multihypothesis_;
+  bool multihypothesis_dialogue_;
   float min_candidate_weight_;
   double min_candidate_distance_;
   double min_candidate_angle_;
@@ -121,11 +129,14 @@ private:
   sensor_msgs::msg::LaserScan::UniquePtr last_laser_;
   std::shared_ptr<mh_amcl::MapMatcher> matcher_;
   std::list<TransformWeighted> hypos_;
-  
+  rclcpp::Client<vqa_msgs::srv::Hypothesis>::SharedFuture hypo_future_;
+
+
   void map_callback(const nav_msgs::msg::OccupancyGrid::ConstSharedPtr & msg);
   void laser_callback(sensor_msgs::msg::LaserScan::UniquePtr lsr_msg);
   void initpose_callback(
     const geometry_msgs::msg::PoseWithCovarianceStamped::ConstSharedPtr & pose_msg);
+  void monologue_hypos_callback(vqa_msgs::msg::MonologueHypothesis::UniquePtr msg);
   int counter_ {0};
 };
 

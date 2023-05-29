@@ -16,6 +16,7 @@ find_package(tf2)
 find_package(nav2_util)
 find_package(nav2_msgs)
 find_package(mh_amcl_msgs)
+find_package(vqa_msgs)
 
 set(dependencies
   rclcpp
@@ -30,6 +31,7 @@ set(dependencies
   nav2_util
   nav2_msgs
   mh_amcl_msgs
+  vqa_msgs
 )
 
 include_directories(
