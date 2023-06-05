@@ -97,6 +97,7 @@ private:
   rclcpp::TimerBase::SharedPtr hypotesys_timer_;
   rclcpp::TimerBase::SharedPtr publish_particles_timer_;
   rclcpp::TimerBase::SharedPtr publish_position_timer_;
+  rclcpp::CallbackGroup::SharedPtr timer_cb_group_;
 
   int max_hypotheses_;
   bool multihypothesis_;

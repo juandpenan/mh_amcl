@@ -54,6 +54,7 @@ MH_AMCL_Node::MH_AMCL_Node(const rclcpp::NodeOptions & options)
   tf_buffer_(),
   tf_listener_(tf_buffer_)
 {
+  timer_cb_group_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
   sub_laser_ = create_subscription<sensor_msgs::msg::LaserScan>(
     "scan", rclcpp::QoS(100).best_effort(), std::bind(&MH_AMCL_Node::laser_callback, this, _1));
   sub_map_ = create_subscription<nav_msgs::msg::OccupancyGrid>(
@@ -163,7 +164,7 @@ MH_AMCL_Node::on_activate(const rclcpp_lifecycle::State & state)
   publish_particles_timer_ = create_wall_timer(
     100ms, std::bind(&MH_AMCL_Node::publish_particles, this));
   publish_position_timer_ = create_wall_timer(
-    30ms, std::bind(&MH_AMCL_Node::publish_position, this));
+    30ms, std::bind(&MH_AMCL_Node::publish_position, this), timer_cb_group_);
 
   std::list<CallbackReturnT> ret;
   for (auto & particles : particles_population_) {
