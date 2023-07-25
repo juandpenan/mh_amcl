@@ -399,13 +399,14 @@ ParticlesDistribution::init(const  std::list<TransformWeighted> & multiple_poses
 void
 ParticlesDistribution::init(const tf2::Transform & pose_init)
 {
-  // std::normal_distribution<double> noise_x(0, init_error_x_);
-  // std::normal_distribution<double> noise_y(0, init_error_y_);
-  // std::normal_distribution<double> noise_t(0, init_error_yaw_);
+  std::normal_distribution<double> noise_x(0, init_error_x_);
+  std::normal_distribution<double> noise_y(0, init_error_y_);
+  std::normal_distribution<double> noise_t(0, init_error_yaw_);
 
-  std::normal_distribution<double> noise_x(0, 0.5);
-  std::normal_distribution<double> noise_y(0, 0.5);
-  std::normal_distribution<double> noise_t(0, 2 * M_PI);
+  // std::normal_distribution<double> noise_x(0, 0.5);
+  // std::normal_distribution<double> noise_y(0, 0.5);
+  // std::normal_distribution<double> noise_t(0, M_PI);
+
 
   particles_.clear();
   particles_.resize((max_particles_ + min_particles_) / 2);

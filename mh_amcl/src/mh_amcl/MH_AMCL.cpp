@@ -534,6 +534,7 @@ MH_AMCL_Node::manage_hypotesis()
 
     
   auto & tfs = hypos_;
+  RCLCPP_INFO(get_logger(), "handling hypos");
   auto start = now();
   
   if (multihypothesis_)
